@@ -2,83 +2,131 @@ from flask import Flask, render_template, request, jsonify
 import pandas as pd
 import joblib
 import numpy as np
+import os
 
 app = Flask(__name__)
 
-# Load model files
-model = joblib.load("model/model.pkl")
-scaler = joblib.load("model/scaler.pkl")
-feature_names = joblib.load("model/feature_names.pkl")
+# ---------------- LOAD FILES ----------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Load dataset
-df = pd.read_csv("data/Final_dataset.csv", low_memory=False)
+model = joblib.load(os.path.join(BASE_DIR, "model/model.pkl"))
+scaler = joblib.load(os.path.join(BASE_DIR, "model/scaler.pkl"))
+feature_names = joblib.load(os.path.join(BASE_DIR, "model/feature_names.pkl"))
 
+df = pd.read_csv(os.path.join(BASE_DIR, "data/Final_dataset.csv"), low_memory=False)
+
+
+# ---------------- HOME ----------------
 @app.route("/")
 def home():
     countries = sorted(df["country"].dropna().unique())
     years = sorted(df["year"].dropna().unique())
 
-    return render_template("index.html",
-                           countries=countries,
-                           years=years)
+    return render_template(
+        "index.html",
+        countries=countries,
+        years=years
+    )
 
-# ✅ Auto-fill data
+
+# ---------------- AUTO LOAD DATA ----------------
 @app.route("/get_data", methods=["POST"])
 def get_data():
-    country = request.json["country"]
-    year = request.json["year"]
+    try:
+        data = request.json
+        country = data.get("country")
+        year = int(data.get("year"))
 
-    row = df[(df["country"] == country) & (df["year"] == int(year))]
+        row = df[(df["country"] == country) & (df["year"] == year)]
 
-    if row.empty:
-        return jsonify({})
+        if row.empty:
+            return jsonify({"error": "No data found"}), 404
 
-    row = row.iloc[0]
+        row = row.iloc[0]
 
-    data = {}
-    for f in feature_names:
-        val = row.get(f, 0)
-        try:
-            data[f] = float(val)
-        except:
-            data[f] = 0
+        result = {}
+        for f in feature_names:
+            val = row.get(f, 0)
 
-    return jsonify(data)
+            # Clean value safely
+            try:
+                result[f] = float(val)
+            except:
+                result[f] = 0
 
-# ✅ Prediction
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------- PREDICT ----------------
 @app.route("/predict", methods=["POST"])
 def predict():
-    data = request.json
+    try:
+        data = request.json
 
-    X = pd.DataFrame([[data.get(f, 0) for f in feature_names]],
-                     columns=feature_names)
+        # Ensure ALL features are present
+        X = pd.DataFrame([[data.get(f, 0) for f in feature_names]],
+                         columns=feature_names)
 
-    X_scaled = scaler.transform(X)
+        # Handle NaN / invalid
+        X = X.fillna(0)
 
-    pred = model.predict(X_scaled)[0]
-    prob = model.predict_proba(X_scaled).max()
+        # Scale
+        X_scaled = scaler.transform(X)
 
-    return jsonify({
-        "prediction": str(pred),
-        "confidence": round(float(prob)*100, 2)
-    })
+        # Predict
+        pred = model.predict(X_scaled)[0]
 
-# ✅ Feature Importance
+        # Probability (safe check)
+        if hasattr(model, "predict_proba"):
+            prob = model.predict_proba(X_scaled).max()
+            confidence = round(float(prob) * 100, 2)
+        else:
+            confidence = "N/A"
+
+        return jsonify({
+            "prediction": str(pred),
+            "confidence": confidence
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------- FEATURE IMPORTANCE ----------------
 @app.route("/feature_importance")
 def feature_importance():
-    fi = pd.read_csv("model/feature_importance.csv").head(10)
-    return fi.to_json(orient="records")
+    try:
+        fi_path = os.path.join(BASE_DIR, "model/feature_importance.csv")
+        fi = pd.read_csv(fi_path).head(10)
 
-# ✅ Insights
+        return fi.to_json(orient="records")
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------- INSIGHTS ----------------
 @app.route("/insights")
 def insights():
-    fi = pd.read_csv("model/feature_importance.csv").head(5)
+    try:
+        fi_path = os.path.join(BASE_DIR, "model/feature_importance.csv")
+        fi = pd.read_csv(fi_path).head(5)
 
-    insights = []
-    for _, row in fi.iterrows():
-        insights.append(f"{row['feature']} is a key driver of hunger levels")
+        insights = [
+            f"{row['feature']} strongly influences hunger prediction"
+            for _, row in fi.iterrows()
+        ]
 
-    return jsonify(insights)
+        return jsonify(insights)
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------- RUN ----------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))  # 🔥 REQUIRED FOR RENDER
+    app.run(host="0.0.0.0", port=port)
