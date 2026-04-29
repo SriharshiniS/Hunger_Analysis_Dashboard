@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Food Security Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: linear-gradient(to right, #0f2027, #203a43, #2c5364);
+            color: white;
+            text-align: center;
+        }
+
+        .card {
+            background: white;
+            color: black;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 15px;
+        }
+
+        select, button {
+            padding: 10px;
+            margin: 10px;
+        }
+
+        input[type=range] {
+            width: 300px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>🌍 AI Food Security Dashboard</h1>
+
+<div class="card">
+
+    <h3>Select Country & Year</h3>
+
+    <select id="country">
+        {% for c in countries %}
+        <option value="{{c}}">{{c}}</option>
+        {% endfor %}
+    </select>
+
+    <select id="year">
+        {% for y in years %}
+        <option value="{{y}}">{{y}}</option>
+        {% endfor %}
+    </select>
+
+    <br>
+
+    <button onclick="loadData()">Load Data</button>
+
+</div>
+
+<div class="card">
+
+    <h3>📊 Adjust Key Factors (Sliders)</h3>
+
+    GDP: <input type="range" id="gdp" min="0" max="50000" step="1000">
+    <span id="gdp_val"></span><br>
+
+    Poverty: <input type="range" id="poverty" min="0" max="100">
+    <span id="poverty_val"></span><br>
+
+    Food Production: <input type="range" id="food_prod" min="0" max="200">
+    <span id="food_prod_val"></span><br>
+
+    Undernourishment: <input type="range" id="under" min="0" max="50">
+    <span id="under_val"></span><br>
+
+    <button onclick="predict()">Predict Hunger</button>
+
+    <h2 id="result"></h2>
+
+</div>
+
+<div class="card">
+    <h3>📊 Feature Importance</h3>
+    <div id="chart"></div>
+</div>
+
+<div class="card">
+    <h3>🧠 Insights</h3>
+    <ul id="insights"></ul>
+</div>
+
+<script>
+
+function updateLabels(){
+    document.getElementById("gdp_val").innerText =
+        document.getElementById("gdp").value;
+
+    document.getElementById("poverty_val").innerText =
+        document.getElementById("poverty").value;
+
+    document.getElementById("food_prod_val").innerText =
+        document.getElementById("food_prod").value;
+
+    document.getElementById("under_val").innerText =
+        document.getElementById("under").value;
+}
+
+// Update labels when slider moves
+document.querySelectorAll("input").forEach(el=>{
+    el.oninput = updateLabels;
+});
+
+// Load dataset values
+function loadData(){
+    fetch("/get_data", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+            country:document.getElementById("country").value,
+            year:document.getElementById("year").value
+        })
+    })
+    .then(res=>res.json())
+    .then(data=>{
+
+        document.getElementById("gdp").value = data.gdp_per_capita_usd || 0;
+        document.getElementById("poverty").value = data.poverty_headcount_pct || 0;
+        document.getElementById("food_prod").value = data.food_production_index || 0;
+        document.getElementById("under").value = data.undernourishment_pct || 0;
+
+        updateLabels();
+    });
+}
+
+// Prediction
+function predict(){
+
+    let data = {
+        gdp_per_capita_usd: parseFloat(document.getElementById("gdp").value),
+        poverty_headcount_pct: parseFloat(document.getElementById("poverty").value),
+        food_production_index: parseFloat(document.getElementById("food_prod").value),
+        undernourishment_pct: parseFloat(document.getElementById("under").value)
+    };
+
+    fetch("/predict",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(data)
+    })
+    .then(res=>res.json())
+    .then(out=>{
+        document.getElementById("result").innerHTML =
+            "Prediction: " + out.prediction +
+            " (" + out.confidence + "% confidence)";
+    });
+}
+
+// Feature Importance
+fetch("/feature_importance")
+.then(res=>res.json())
+.then(data=>{
+    Plotly.newPlot("chart", [{
+        x: data.map(d=>d.importance),
+        y: data.map(d=>d.feature),
+        type:"bar",
+        orientation:"h"
+    }]);
+});
+
+// Insights
+fetch("/insights")
+.then(res=>res.json())
+.then(data=>{
+    let ul = document.getElementById("insights");
+    data.forEach(i=>{
+        let li = document.createElement("li");
+        li.innerText = i;
+        ul.appendChild(li);
+    });
+});
+
+</script>
+
+</body>
+</html>

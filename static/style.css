@@ -1,0 +1,22 @@
+body {
+    font-family: Arial;
+    background: linear-gradient(to right, #56ab2f, #a8e063);
+    color: white;
+    text-align: center;
+}
+
+.container {
+    padding: 20px;
+}
+
+select, input {
+    margin: 10px;
+    padding: 10px;
+    border-radius: 10px;
+}
+
+button {
+    padding: 10px;
+    background: black;
+    color: white;
+}
