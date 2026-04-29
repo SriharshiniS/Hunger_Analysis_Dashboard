@@ -7,13 +7,20 @@ import os
 app = Flask(__name__)
 
 # ---------------- LOAD FILES ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+import gdown
+import os
 
-model = joblib.load(os.path.join(BASE_DIR, "model/model.pkl"))
-scaler = joblib.load(os.path.join(BASE_DIR, "model/scaler.pkl"))
-feature_names = joblib.load(os.path.join(BASE_DIR, "model/feature_names.pkl"))
+file_id = "12V104uIg9VeIauKEoe9G9uP4cTD_dPzl"
+url = f"https://drive.google.com/uc?id={file_id}"
 
-df = pd.read_csv(os.path.join(BASE_DIR, "data/Final_dataset.csv"), low_memory=False)
+output = "data/Final_dataset.csv"
+
+os.makedirs("data", exist_ok=True)
+
+if not os.path.exists(output):
+    gdown.download(url, output, quiet=False)
+
+df = pd.read_csv(output, low_memory=False)
 
 
 # ---------------- HOME ----------------
